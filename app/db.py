@@ -28,6 +28,39 @@ CREATE TABLE IF NOT EXISTS summary_hours (
     version    INTEGER NOT NULL,     -- 生成摘要时该小时的版本快照
     PRIMARY KEY (summary_id, hour_ts)
 );
+-- 纸带核对：一次"试算"对应质检员按某版号明细提交的一组纸带标记
+CREATE TABLE IF NOT EXISTS reconciliations (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    hour_ts      INTEGER NOT NULL,
+    version      INTEGER NOT NULL,        -- 提交试算时明细的版号（计算与登记都须核对）
+    feasible     INTEGER NOT NULL,        -- 1=存在可行排法；0=整组退回
+    reading_count INTEGER NOT NULL,       -- 试算时该小时明细行数（来自同一已提交状态）
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recon_hour ON reconciliations(hour_ts);
+-- 纸带上标出的分钟（每分钟最多一笔）及其同温要求
+CREATE TABLE IF NOT EXISTS tape_marks (
+    recon_id    INTEGER NOT NULL REFERENCES reconciliations(id),
+    minute      INTEGER NOT NULL CHECK (minute BETWEEN 0 AND 59),
+    temperature REAL NOT NULL,
+    PRIMARY KEY (recon_id, minute)
+);
+-- 试算结果：按录入序号逐笔列出可行分钟；唯一可行时登记 minute_index
+CREATE TABLE IF NOT EXISTS reconciliation_readings (
+    recon_id       INTEGER NOT NULL REFERENCES reconciliations(id),
+    entry_order    INTEGER NOT NULL,      -- 0 起，对应 readings 的录入顺序
+    temperature    REAL NOT NULL,
+    feasible_minutes TEXT NOT NULL,       -- JSON 数组，可能为空
+    minute_index   INTEGER,               -- 仅当可行分钟恰有一个时非空
+    PRIMARY KEY (recon_id, entry_order)
+);
+-- 核定登记：每个小时最多保留一条"上次核定"，登记失败（版号不符/无可行排法）不动它
+CREATE TABLE IF NOT EXISTS approvals (
+    hour_ts    INTEGER PRIMARY KEY,
+    recon_id   INTEGER NOT NULL REFERENCES reconciliations(id),
+    version    INTEGER NOT NULL,          -- 登记时刻核对过的明细版号
+    created_at TEXT NOT NULL
+);
 """
 
 

@@ -85,3 +85,64 @@ class SummaryOut(BaseModel):
     over_count: int
     created_at: str
     valid: bool
+
+
+# ---------- 纸带核对 ----------
+
+class TapeMarkIn(BaseModel):
+    """纸带上标出的一笔：分钟（0～59）与同温读数。"""
+
+    minute: int = Field(ge=0, le=59)
+    temperature: Annotated[float, Field(allow_inf_nan=False)]
+
+
+class ReconciliationIn(BaseModel):
+    """按小时和明细版号提交的整组纸带标记。"""
+
+    version: int = Field(ge=1, description="提交时该小时明细的版号，计算与登记都须核对")
+    marks: list[TapeMarkIn] = Field(
+        min_length=1, description="纸带上标出的分钟与温度；同一分钟最多一笔"
+    )
+
+    @model_validator(mode="after")
+    def _unique_minutes(self):
+        minutes = [m.minute for m in self.marks]
+        if len(set(minutes)) != len(minutes):
+            raise ValueError("同一分钟最多一笔纸带标记")
+        return self
+
+
+class FeasibleReadingOut(BaseModel):
+    entry_order: int
+    temperature: float
+    feasible_minutes: list[int]
+    minute_index: Optional[int] = None
+
+
+class TapeMarkOut(BaseModel):
+    minute: int
+    temperature: float
+
+
+class ReconciliationOut(BaseModel):
+    id: int
+    hour: str
+    version: int
+    feasible: bool
+    reading_count: int
+    created_at: str
+    marks: list[TapeMarkOut]
+    readings: list[FeasibleReadingOut]
+
+
+class ApprovalOut(BaseModel):
+    hour: str
+    recon_id: int
+    approved_version: int
+    current_version: Optional[int] = None
+    stale: bool
+    approved_at: str
+    feasible: bool
+    reading_count: int
+    marks: list[TapeMarkOut]
+    readings: list[FeasibleReadingOut]
